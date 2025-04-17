@@ -5,39 +5,167 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebRTC Audio Stream</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        .message img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .message-content {
+            background-color: #e1f5fe;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .message-meta {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .chat-input {
+            display: flex;
+            margin-top: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .chat-input button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            margin-left: 5px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <h1>WebRTC Audio Stream</h1>
     <p>Streaming audio data in real-time.</p>
+
+    <!-- Chat Section -->
+    <div class="chat-container">
+        <div id="chat-messages">
+            <!-- Example message -->
+            <div class="message">
+                <img src="https://via.placeholder.com/40" alt="User 1">
+                <div>
+                    <div class="message-content">Hello! How are you?</div>
+                    <div class="message-meta">User 1 • 10:30 AM</div>
+                </div>
+            </div>
+            <div class="message">
+                <img src="https://via.placeholder.com/40" alt="User 2">
+                <div>
+                    <div class="message-content">I'm good, thanks! And you?</div>
+                    <div class="message-meta">User 2 • 10:31 AM</div>
+                </div>
+            </div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="chat-input" placeholder="Type a message...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
     <script>
         const socket = io();
+
         // Access the user's microphone and stream audio
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then((stream) => {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const mediaStreamSource = audioContext.createMediaStreamSource(stream);
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
-            mediaStreamSource.connect(processor);
-            processor.connect(audioContext.destination);
+                mediaStreamSource.connect(processor);
+                processor.connect(audioContext.destination);
 
-            processor.onaudioprocess = (event) => {
-                const audioData = event.inputBuffer.getChannelData(0);
-                sendAudioStream(audioData);
-            };
+                processor.onaudioprocess = (event) => {
+                    const audioData = event.inputBuffer.getChannelData(0);
+                    sendAudioStream(audioData);
+                };
             })
             .catch((error) => {
-            console.error('Error accessing microphone:', error);
+                console.error('Error accessing microphone:', error);
             });
-        // Example: Emit audio stream to server
+
+        // Emit audio stream to server
         function sendAudioStream(audioData) {
             socket.emit('audio_stream', audioData);
         }
 
-        // Example: Listen for audio playback
+        // Listen for audio playback
         socket.on('play_audio', (data) => {
             console.log('Received audio data:', data);
             // Process or play the audio data here
+        });
+
+        // Chat functionality
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+
+        sendButton.addEventListener('click', () => {
+            const message = chatInput.value.trim();
+            if (message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const messageElement = `
+                    <div class="message">
+                        <img src="https://via.placeholder.com/40" alt="You">
+                        <div>
+                            <div class="message-content">${message}</div>
+                            <div class="message-meta">You • ${timestamp}</div>
+                        </div>
+                    </div>
+                `;
+                chatMessages.innerHTML += messageElement;
+                chatInput.value = '';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                // Emit chat message to server
+                socket.emit('chat_message', message);
+            }
+        });
+
+        // Listen for incoming chat messages
+        socket.on('chat_message', (data) => {
+            const timestamp = new Date().toLocaleTimeString();
+            const messageElement = `
+                <div class="message">
+                    <img src="https://via.placeholder.com/40" alt="${data.user}">
+                    <div>
+                        <div class="message-content">${data.message}</div>
+                        <div class="message-meta">${data.user} • ${timestamp}</div>
+                    </div>
+                </div>
+            `;
+            chatMessages.innerHTML += messageElement;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         });
     </script>
 </body>
