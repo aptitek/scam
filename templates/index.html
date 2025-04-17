@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Audio Stream</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>WebRTC Audio Stream</h1>
+    <p>Streaming audio data in real-time.</p>
+    <script>
+        const socket = io();
+        // Access the user's microphone and stream audio
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then((stream) => {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+            mediaStreamSource.connect(processor);
+            processor.connect(audioContext.destination);
+
+            processor.onaudioprocess = (event) => {
+                const audioData = event.inputBuffer.getChannelData(0);
+                sendAudioStream(audioData);
+            };
+            })
+            .catch((error) => {
+            console.error('Error accessing microphone:', error);
+            });
+        // Example: Emit audio stream to server
+        function sendAudioStream(audioData) {
+            socket.emit('audio_stream', audioData);
+        }
+
+        // Example: Listen for audio playback
+        socket.on('play_audio', (data) => {
+            console.log('Received audio data:', data);
+            // Process or play the audio data here
+        });
+    </script>
+</body>
+</html>

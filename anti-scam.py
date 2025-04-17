@@ -6,7 +6,7 @@ import sounddevice as sd
 import soundfile as sf
 
 # Load the API key from a separate file
-with open("nebius_api_key.txt", "r") as key_file:
+with open("private/nebius_api_key.txt", "r") as key_file:
     nebius_api_key = key_file.read().strip()
 
 llm_client = InferenceClient(
@@ -14,7 +14,7 @@ llm_client = InferenceClient(
     api_key=nebius_api_key,
 )
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="key.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="private/key.json"
 
 # Donner le contexte général
 context = "Tu es une fausse victime d'arnaque. Tu sert à faire perdre du temps à un arnaqueur. Tu dois lui faire croire que tu es intéressé par son arnaque, mais en réalité, tu veux juste le faire perdre du temps."
@@ -35,39 +35,36 @@ messages=[
         }
     ]
 
-while True:
-    # Record audio from the microphone
-    duration = 5  # seconds
-    sample_rate = 44100  # Hz
-    print("Recording...")
-    #print(sd.query_devices())
-    #sd.default.device = 12
-    audio_data = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
-    sd.wait()  # Wait until recording is finished
-    print("Recording finished.")
 
-    # Save the recorded audio to a file
-    sf.write('voice.flac', audio_data, sample_rate)
-    
-    #user_input = stt_client.automatic_speech_recognition("voice.flac", model="openai/whisper-large-v3")
-    
-    speech_client = speech.SpeechClient()
-    with open("voice.flac", "rb") as audio_file:
-        content = audio_file.read()
-    audio = speech.RecognitionAudio(content=content)
-    config = speech.RecognitionConfig(
-        #encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=44100,
-        language_code="fr-FR",
-    )
-    speech_result = speech_client.recognize(config=config, audio=audio)
-    
-    if (len(speech_result.results) == 0):
-        print("Aucune voix détectée.")
-        continue
-    user_input = speech_result.results[0].alternatives[0].transcript
-    print("Escroc : ", user_input)
-    
+def record_and_transcribe():
+        # Record audio from the microphone
+        duration = 5  # seconds
+        sample_rate = 44100  # Hz
+        print("Recording...")
+        audio_data = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
+        sd.wait()  # Wait until recording is finished
+        print("Recording finished.")
+
+        # Save the recorded audio to a file
+        sf.write('cache/voice.flac', audio_data, sample_rate)
+        
+        # Transcribe the audio using Google Cloud Speech-to-Text
+        speech_client = speech.SpeechClient()
+        with open("cache/voice.flac", "rb") as audio_file:
+            content = audio_file.read()
+        audio = speech.RecognitionAudio(content=content)
+        config = speech.RecognitionConfig(
+            sample_rate_hertz=44100,
+            language_code="fr-FR",
+        )
+        speech_result = speech_client.recognize(config=config, audio=audio)
+        
+        if len(speech_result.results) == 0:
+            print("Aucune voix détectée.")
+            return None
+        return speech_result.results[0].alternatives[0].transcript
+
+def process_user_input(user_input, messages, llm_client):
     messages.append(
         {
             "role": "user",
@@ -95,15 +92,16 @@ while True:
             "content": reponse,
         }
     )
-    
+    return reponse
+
+def synthesize_speech(reponse):
     tts_client = texttospeech.TextToSpeechClient()
 
     # Set the text input to be synthesized
     synthesis_input = texttospeech.SynthesisInput(text=reponse)
 
-    # Build the voice request, select the language code ("en-US") 
-    # ****** the NAME
-    # and the ssml voice gender ("neutral")
+    # Build the voice request, select the language code ("fr-FR") 
+    # and the ssml voice gender ("female")
     voice = texttospeech.VoiceSelectionParams(
         language_code='fr-FR',
         name='fr-FR-Chirp-HD-O',
@@ -115,10 +113,25 @@ while True:
 
     # Perform the text-to-speech request on the text input with the selected
     # voice parameters and audio file type
-    response = tts_client.synthesize_speech(input = synthesis_input, voice = voice, audio_config = audio_config)
+    response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
     # The response's audio_content is binary.
-    with open('output.mp3', 'wb') as out:
+    output_path = 'cache/output.mp3'
+    with open(output_path, 'wb') as out:
         # Write the response to the output file.
         out.write(response.audio_content)
-        print('Audio content written to file "output.mp3"')
+        print(f'Audio content written to file "{output_path}"')
+    return output_path
+
+# Boucle principale
+while True:
+    
+    
+    
+    user_input = record_and_transcribe()
+    if not user_input:
+        continue
+    print("Escroc : ", user_input)
+    
+    synthesize_speech(process_user_input(user_input, messages, llm_client))
+    
